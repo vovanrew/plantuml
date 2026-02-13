@@ -440,6 +440,10 @@ public class Swimlanes extends AbstractTextBlock implements TextBlock, Styleable
 		return currentInstruction;
 	}
 
+	public Instruction getRootInstruction() {
+		return root;
+	}
+
 	public void setCurrent(Instruction current) {
 		this.currentInstruction = current;
 	}

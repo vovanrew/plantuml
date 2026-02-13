@@ -36,6 +36,7 @@
 package net.sourceforge.plantuml.activitydiagram3;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -69,6 +70,10 @@ public class InstructionFork extends WithNote implements Instruction {
 	private ForkStyle style = ForkStyle.FORK;
 	private String label;
 	boolean finished = false;
+
+	public List<InstructionList> getForks() {
+		return Collections.unmodifiableList(forks);
+	}
 	private final Colors colors;
 
 	@Override

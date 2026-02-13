@@ -77,6 +77,10 @@ public class InstructionRepeat extends AbstractInstruction implements Instructio
 
 	private Display backward = Display.NULL;
 
+	public InstructionList getRepeatList() {
+		return repeatList;
+	}
+
 	private Stereotype stereotypeLoop;
 	private Stereotype stereotypeBack;
 	private LinkRendering incoming1 = LinkRendering.none();

@@ -76,6 +76,10 @@ public class Branch {
 	private LinkRendering special;
 
 	private final HColor color;
+
+	public InstructionList getInstructionList() {
+		return list;
+	}
 	private Colors specialColors;
 
 	private Ftile ftile;

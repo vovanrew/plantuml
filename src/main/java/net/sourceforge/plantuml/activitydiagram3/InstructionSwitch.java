@@ -74,6 +74,10 @@ public class InstructionSwitch extends WithNote implements Instruction, Instruct
 	private final Colors colors;
 	private Colors endColors;
 
+	public List<Branch> getSwitches() {
+		return Collections.unmodifiableList(switches);
+	}
+
 	@Override
 	public boolean containsBreak() {
 		for (Branch branch : switches)
