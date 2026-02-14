@@ -79,6 +79,10 @@ public class Branch {
 
 	private final HColor color;
 
+	public InstructionList getInstructionList() {
+		return list;
+	}
+
 	private Ftile ftile;
 	// ::comment when __CORE__
 	private Gtile gtile;

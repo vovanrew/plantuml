@@ -80,6 +80,14 @@ public class InstructionIf extends WithNote implements Instruction, InstructionC
 	private final Swimlane swimlane;
 	private final StyleBuilder currentStyleBuilder;
 
+	public List<Branch> getThens() {
+		return Collections.unmodifiableList(thens);
+	}
+
+	public Branch getElseBranch() {
+		return elseBranch;
+	}
+
 	@Override
 	public boolean containsBreak() {
 		for (Branch branch : thens)

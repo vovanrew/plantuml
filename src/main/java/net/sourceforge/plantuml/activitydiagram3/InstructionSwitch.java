@@ -73,6 +73,10 @@ public class InstructionSwitch extends WithNote implements Instruction, Instruct
 
 	private final Swimlane swimlane;
 
+	public List<Branch> getSwitches() {
+		return Collections.unmodifiableList(switches);
+	}
+
 	@Override
 	public boolean containsBreak() {
 		for (Branch branch : switches)

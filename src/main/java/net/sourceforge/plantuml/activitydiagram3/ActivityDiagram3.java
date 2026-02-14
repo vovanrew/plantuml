@@ -105,6 +105,10 @@ public class ActivityDiagram3 extends UmlDiagram {
 		return swimlanes.getCurrent();
 	}
 
+	public Instruction getRootInstruction() {
+		return swimlanes.getRootInstruction();
+	}
+
 	private LinkRendering nextLinkRenderer() {
 		return swimlanes.nextLinkRenderer();
 	}

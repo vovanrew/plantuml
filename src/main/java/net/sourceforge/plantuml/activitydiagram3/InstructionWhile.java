@@ -73,6 +73,10 @@ public class InstructionWhile extends WithNote implements Instruction, Instructi
 	private boolean testCalled = false;
 
 	private LinkRendering outColor = LinkRendering.none();
+
+	public InstructionList getRepeatList() {
+		return repeatList;
+	}
 	private final Swimlane swimlane;
 
 	private Instruction specialOut;

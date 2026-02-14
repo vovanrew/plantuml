@@ -86,6 +86,10 @@ public class InstructionList extends WithNote implements Instruction, Instructio
 		return all.isEmpty();
 	}
 
+	public List<Instruction> getAll() {
+		return Collections.unmodifiableList(all);
+	}
+
 	public boolean isOnlySingleStopOrSpot() {
 		if (all.size() != 1)
 			return false;
