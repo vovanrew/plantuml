@@ -1,109 +1,115 @@
-# 🌱 PlantUML
+ Fork of [PlantUML](https://github.com/plantuml/plantuml) (v1.2025.9) with a custom statistics extraction tool.
+# DiagramStatsExtractor
 
-Generate UML diagrams from textual descriptions.
+A tool for extracting structural element and connection statistics from PlantUML diagrams. It reuses PlantUML's own internal parser to achieve compiler-grade accuracy, including full support for activity diagrams with implicit control flow edges.
 
-[![Discord server](https://img.shields.io/discord/1083727021328306236?color=5865F2&logo=discord&logoColor=white)](https://discord.gg/sXhzexAQGh)
-[![GitHub Sponsors](https://img.shields.io/github/sponsors/plantuml?logo=github)](https://github.com/sponsors/plantuml/)
-[![GitHub Org's stars](https://img.shields.io/github/stars/plantuml)](https://github.com/plantuml/plantuml/stargazers/)
-[![GitHub watchers](https://img.shields.io/github/watchers/plantuml/plantuml)](https://github.com/plantuml/plantuml/watchers/)
-[![GitHub contributors](https://img.shields.io/github/contributors-anon/plantuml/plantuml?color=blue)](https://github.com/plantuml/plantuml/graphs/contributors)
-[![GitHub forks](https://img.shields.io/github/forks/plantuml/plantuml)](https://github.com/plantuml/plantuml/network/)
-[![GitHub all releases](https://img.shields.io/sourceforge/dt/plantuml?color=blue)](https://github.com/plantuml/plantuml/releases)
+This fork adds minimal modifications to PlantUML (version 1.2025.9) to expose internal data structures required for statistics extraction. No changes were made to PlantUML's parsing logic or diagram rendering.
 
-[![Release (latest by date)](https://img.shields.io/github/v/release/plantuml/plantuml)](https://github.com/plantuml/plantuml/releases/latest)
-[![Release Date](https://img.shields.io/github/release-date/plantuml/plantuml?color=blue)](https://github.com/plantuml/plantuml/releases/latest)
-[![GitHub commits since latest release (by date)](https://img.shields.io/github/commits-since/plantuml/plantuml/latest)](https://github.com/plantuml/plantuml/commits/)
-[![javadoc](https://javadoc.io/badge2/net.sourceforge.plantuml/plantuml-gplv2/javadoc.svg)](https://javadoc.io/doc/net.sourceforge.plantuml/plantuml-gplv2)
+## Changes from Upstream PlantUML
 
-[![Pre-release (latest by date)](https://img.shields.io/github/v/release/plantuml/plantuml?color=chocolate&include_prereleases)](https://github.com/plantuml/plantuml/releases/tag/snapshot)
-[![Pre-release Date](https://img.shields.io/github/release-date-pre/plantuml/plantuml?color=chocolate)](https://github.com/plantuml/plantuml/releases/tag/snapshot)
-[![GitHub last commit](https://img.shields.io/github/last-commit/plantuml/plantuml?color=chocolate)](https://github.com/plantuml/plantuml/commits/)
-[![CI](https://github.com/plantuml/plantuml/actions/workflows/ci.yml/badge.svg?color=chocolate)](https://github.com/plantuml/plantuml/actions/workflows/ci.yml)
-[![snapshot javadoc](https://img.shields.io/badge/javadoc-snapshot-chocolate.svg?logo=github)](https://plantuml.github.io/plantuml/javadoc)
-[![snapshot jacoco](https://img.shields.io/badge/code_coverage%3A_jacoco-snapshot-chocolate?logo=github)](https://plantuml.github.io/plantuml/jacoco)
+- **10 public getter methods** added to activity diagram instruction classes to expose private fields for tree traversal (44 lines across 9 files)
+- **1 new class** added: `net.sourceforge.plantuml.stats.DiagramStatsExtractor` — the extraction tool entry point
 
-## ℹ️ About
+## Prerequisites
 
-PlantUML is a component that allows you to create various UML diagrams through simple textual descriptions. From sequence diagrams to deployment diagrams and beyond, PlantUML provides an easy way to create visual representations of complex systems.
+- Java 8 or later
 
-### 🗃️ Supported Diagram Types
+## Build
 
-- 🧩 UML Diagrams
-  - [Sequence diagram](http://plantuml.com/sequence-diagram)
-  - [Use case diagram](http://plantuml.com/use-case-diagram)
-  - [Class diagram](http://plantuml.com/class-diagram)
-  - [Object diagram](http://plantuml.com/object-diagram)
-  - [Activity diagram](http://plantuml.com/activity-diagram-beta)
-    - [Legacy syntax](http://plantuml.com/activity-diagram-legacy)
-  - [Component diagram](http://plantuml.com/component-diagram)
-  - [Deployment diagram](http://plantuml.com/deployment-diagram)
-  - [State diagram](http://plantuml.com/state-diagram)
-  - [Timing diagram](http://plantuml.com/timing-diagram)
-- 📈 Non-UML Diagrams
-  - [JSON data](http://plantuml.com/json)
-  - [YAML data](http://plantuml.com/yaml)
-  - [EBNF (Extended Backus-Naur Form)](http://plantuml.com/ebnf)
-  - [Regex (Regular Expression)](http://plantuml.com/regex)
-  - [Network diagram (nwdiag)](http://plantuml.com/nwdiag)
-  - [Salt (Wireframe graphical interface or UI Mockups)](http://plantuml.com/salt)
-  - [Archimate diagram](http://plantuml.com/archimate-diagram)
-  - [SDL (Specification and Description Language)](http://plantuml.com/activity-diagram-beta#sdl)
-  - [Ditaa diagram](http://plantuml.com/ditaa)
-  - [Gantt diagram](http://plantuml.com/gantt-diagram)
-  - [Chronology diagram](http://plantuml.com/chronology-diagram)
-  - [MindMap diagram](http://plantuml.com/mindmap-diagram)
-  - [WBS (Work Breakdown Structure)](http://plantuml.com/wbs-diagram)
-  - [Mathematical Notations (AsciiMath, JLaTeXMath)](http://plantuml.com/ascii-math)
-  - Entity Relationship (ER) diagram
-    - [Information Engineering (IE) diagram](http://plantuml.com/ie-diagram)
-    - [Entity Relationship (ER) diagram (Chen's notation)](http://plantuml.com/er-diagram)
+```bash
+./gradlew build -x test -x javaDoc
+```
 
-### 📣 Additional Features
+This produces a single executable JAR at `build/libs/plantuml-1.2025.9.jar`.
 
-- [Hyperlinks and tooltips](http://plantuml.com/link)
-- [Rich text (Creole) with emoticons, unicode, and icons](http://plantuml.com/creole)
-- [OpenIconic icons](http://plantuml.com/openiconic)
-- [Sprite icons](http://plantuml.com/sprite)
+## Usage
 
-### 📖 Learn More
+```bash
+# Single file
+java -cp build/libs/plantuml-1.2025.9.jar \
+  net.sourceforge.plantuml.stats.DiagramStatsExtractor diagram.puml
 
-For a more detailed overview, visit [PlantUML Official Website](https://plantuml.com/).
+# Multiple files
+java -cp build/libs/plantuml-1.2025.9.jar \
+  net.sourceforge.plantuml.stats.DiagramStatsExtractor file1.puml file2.puml file3.puml
 
-## 🛡 Security
+# All PlantUML files in a directory
+java -cp build/libs/plantuml-1.2025.9.jar \
+  net.sourceforge.plantuml.stats.DiagramStatsExtractor --dir /path/to/puml/files/
+```
 
-See [Security Policy](SECURITY.md) and [Security overview](https://github.com/plantuml/plantuml/security).
+The `--dir` option processes all files with extensions `.puml`, `.plantuml`, `.pu`, `.wsd`, `.uml`, and `.iuml`.
 
-> [!IMPORTANT]
-> [PlantUML is **not** affected by the log4j vulnerability.](https://github.com/plantuml/plantuml/issues/826)
+## Output Format
 
-## 🚀 Getting Started
+The tool writes one JSON object per diagram to standard output (JSON Lines format):
 
-Whether you're looking to use PlantUML as a standalone application or as a component in your own project, getting started is simple. Check out the official [PlantUML setup guide](https://plantuml.com/starting) for instructions on how to set up PlantUML on your system.
+```json
+{
+  "file": "example.puml",
+  "diagram_type": "class",
+  "elements": {"class": 5, "interface": 2, "package": 1},
+  "elements_total": 8,
+  "connections": {"extends": 3, "arrow": 4},
+  "connections_total": 7,
+  "error": null
+}
+```
 
-## ⚙️ Building from Source
+### Fields
 
-To build PlantUML from source, you'll need to have certain prerequisites installed and follow a series of steps outlined in our build guide. Find detailed instructions in our [BUILDING.md](https://github.com/plantuml/plantuml/blob/master/BUILDING.md) file.
+| Field | Description |
+|-------|-------------|
+| `file` | Input filename. Multi-diagram files receive a numeric suffix (e.g., `file.puml_1`). |
+| `diagram_type` | Detected diagram type: `class`, `sequence`, `activity`, `state`, `component`, `object`, etc. Null on parse failure. |
+| `elements` | Element counts by type. Keys are dynamic and depend on diagram contents. |
+| `elements_total` | Sum of all element counts. |
+| `connections` | Connection counts by type. Keys are dynamic and depend on diagram type. |
+| `connections_total` | Sum of all connection counts. |
+| `error` | Null on success. Descriptive string on failure (e.g., `parse_error`, `unsupported_type:TimingDiagram`). |
 
-## 🧱 Contributing
+### Element Type Keys
 
-PlantUML is an open-source project, and we welcome contributions of all kinds. Whether you're helping us fix bugs, improve the docs, or spread the word, we appreciate your support. See our [contributing guide](CONTRIBUTING.md) for more information on how to get started.
+**Class/component/state/object/usecase/deployment diagrams**: derived from PlantUML's `LeafType` and `GroupType` enums (e.g., `class`, `interface`, `abstract_class`, `enum`, `component`, `state`, `package`).
 
-For comprehensive and detailed documentation on using PlantUML, refer to the [official Javadoc, available here](https://plantuml.github.io/plantuml/javadoc). Please note that this documentation is a work in progress and may not be complete. 
+**Sequence diagrams**: derived from `ParticipantType` enum (e.g., `participant`, `actor`, `database`, `boundary`, `control`).
 
-## 🧑‍🤝‍🧑 Support and Community
+**Activity diagrams**: derived from instruction node types (e.g., `simple`, `start`, `stop`, `decision`, `loop`, `fork`, `switch`).
 
-- [GitHub issues](https://github.com/plantuml/plantuml/issues/)
-- [Community Forum](https://forum.plantuml.net/)
+### Connection Type Keys
 
-## 📃 License
+**Class/component/state/object/usecase/deployment diagrams**: classified by link decoration (e.g., `extends`, `composition`, `aggregation`, `arrow`, `none`).
 
-PlantUML is licensed under several licenses; you can choose the one that suits you best:
+**Sequence diagrams**: `message` (between two participants) or `message_exo` (to/from external actor).
 
-- [GPL license](https://www.gnu.org/licenses/gpl-3.0.html)
-- [LGPL license](https://www.gnu.org/licenses/lgpl-3.0.html)
-- [Apache license](https://www.apache.org/licenses/LICENSE-2.0)
-- [Eclipse Public license](https://www.eclipse.org/legal/epl-2.0/)
-- [MIT license](https://opensource.org/licenses/MIT)
+**Activity diagrams**: classified by control flow semantics (`sequential`, `branch`, `merge`, `loop_entry`, `loop_back`, `loop_exit`, `fork_split`, `fork_join`).
 
-For more information, please refer to the [PlantUML license FAQ](https://plantuml.com/en/faq#ddbc9d04378ee462) to help determine which license is appropriate for your use case.
+## Supported Diagram Types
 
+| Diagram Type | Extraction Strategy | Coverage |
+|-------------|-------------------|----------|
+| class, object, component, deployment, usecase, state | Entity-Link (CucaDiagram) | Elements and connections |
+| sequence | Participant-Event (SequenceDiagram) | Elements and connections |
+| activity (beta syntax) | Instruction tree traversal (ActivityDiagram3) | Elements and connections |
+| activity (legacy syntax) | Entity-Link (CucaDiagram) | Elements and connections |
+| Other (timing, mindmap, etc.) | Not supported | Reported as `unsupported_type` error |
+
+## Batch Processing
+
+For large-scale processing, use the `--dir` option or pass multiple file paths. All files are processed within a single JVM process, avoiding per-file startup overhead.
+
+```bash
+# Process entire dataset, save results as JSONL
+java -cp build/libs/plantuml-1.2025.9.jar \
+  net.sourceforge.plantuml.stats.DiagramStatsExtractor --dir /path/to/dataset/ \
+  > results.jsonl
+
+# Errors are written to stderr, results to stdout
+java -cp build/libs/plantuml-1.2025.9.jar \
+  net.sourceforge.plantuml.stats.DiagramStatsExtractor --dir /path/to/dataset/ \
+  > results.jsonl 2> errors.log
+```
+
+## License
+
+This fork retains PlantUML's original GNU General Public License v3 (GPL-3.0).
