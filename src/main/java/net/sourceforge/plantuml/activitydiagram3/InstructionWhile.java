@@ -81,6 +81,10 @@ public class InstructionWhile extends WithNote implements Instruction, Instructi
 
 	private Instruction specialOut;
 
+	public Instruction getSpecialOut() {
+		return specialOut;
+	}
+
 	private BoxStyle boxStyle;
 
 	private Display backward = Display.NULL;

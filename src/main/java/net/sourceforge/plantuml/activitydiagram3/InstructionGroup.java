@@ -61,6 +61,11 @@ import net.sourceforge.plantuml.style.Style;
 public class InstructionGroup extends AbstractInstruction implements Instruction, InstructionCollection {
 
 	private final InstructionList list;
+
+	public InstructionList getInstructionList() {
+		return list;
+	}
+
 	private final Instruction parent;
 	private final HColor backColor;
 	private final LinkRendering linkRendering;

@@ -50,6 +50,11 @@ import net.sourceforge.plantuml.stereo.Stereotype;
 public class InstructionPartition extends AbstractInstruction implements Instruction {
 
 	private final InstructionList list = InstructionList.empty();
+
+	public InstructionList getInstructionList() {
+		return list;
+	}
+
 	private final Instruction parent;
 
 	public InstructionPartition(Instruction parent, String partitionTitle) {

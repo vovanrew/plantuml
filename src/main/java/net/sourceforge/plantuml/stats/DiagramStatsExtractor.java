@@ -21,8 +21,10 @@ import net.sourceforge.plantuml.activitydiagram3.ActivityDiagram3;
 import net.sourceforge.plantuml.activitydiagram3.Branch;
 import net.sourceforge.plantuml.activitydiagram3.Instruction;
 import net.sourceforge.plantuml.activitydiagram3.InstructionFork;
+import net.sourceforge.plantuml.activitydiagram3.InstructionGroup;
 import net.sourceforge.plantuml.activitydiagram3.InstructionIf;
 import net.sourceforge.plantuml.activitydiagram3.InstructionList;
+import net.sourceforge.plantuml.activitydiagram3.InstructionPartition;
 import net.sourceforge.plantuml.activitydiagram3.InstructionRepeat;
 import net.sourceforge.plantuml.activitydiagram3.InstructionSwitch;
 import net.sourceforge.plantuml.activitydiagram3.InstructionWhile;
@@ -214,6 +216,12 @@ public class DiagramStatsExtractor {
 			// Merge point after if/else
 			connections.merge("merge", 1, Integer::sum);
 			total[0] += 1;
+		} else if (instruction instanceof InstructionGroup) {
+			final InstructionGroup groupInst = (InstructionGroup) instruction;
+			countActivityConnections(groupInst.getInstructionList(), connections, total);
+		} else if (instruction instanceof InstructionPartition) {
+			final InstructionPartition partInst = (InstructionPartition) instruction;
+			countActivityConnections(partInst.getInstructionList(), connections, total);
 		} else if (instruction instanceof InstructionWhile) {
 			final InstructionWhile whileInst = (InstructionWhile) instruction;
 			// Entry into loop body + loop-back + exit
@@ -264,6 +272,14 @@ public class DiagramStatsExtractor {
 			for (final Instruction child : list.getAll()) {
 				countActivityElements(child, elements);
 			}
+		} else if (instruction instanceof InstructionGroup) {
+			final InstructionGroup groupInst = (InstructionGroup) instruction;
+			elements.merge("group", 1, Integer::sum);
+			countActivityElements(groupInst.getInstructionList(), elements);
+		} else if (instruction instanceof InstructionPartition) {
+			final InstructionPartition partInst = (InstructionPartition) instruction;
+			elements.merge("partition", 1, Integer::sum);
+			countActivityElements(partInst.getInstructionList(), elements);
 		} else if (instruction instanceof InstructionIf) {
 			final InstructionIf ifInst = (InstructionIf) instruction;
 			elements.merge("decision", 1, Integer::sum);
@@ -277,6 +293,10 @@ public class DiagramStatsExtractor {
 			final InstructionWhile whileInst = (InstructionWhile) instruction;
 			elements.merge("loop", 1, Integer::sum);
 			countActivityElements(whileInst.getRepeatList(), elements);
+			final Instruction specialOut = whileInst.getSpecialOut();
+			if (specialOut != null) {
+				countActivityElements(specialOut, elements);
+			}
 		} else if (instruction instanceof InstructionRepeat) {
 			final InstructionRepeat repeatInst = (InstructionRepeat) instruction;
 			elements.merge("loop", 1, Integer::sum);
