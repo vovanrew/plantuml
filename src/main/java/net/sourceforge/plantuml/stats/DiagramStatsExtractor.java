@@ -26,6 +26,7 @@ import net.sourceforge.plantuml.activitydiagram3.InstructionIf;
 import net.sourceforge.plantuml.activitydiagram3.InstructionList;
 import net.sourceforge.plantuml.activitydiagram3.InstructionPartition;
 import net.sourceforge.plantuml.activitydiagram3.InstructionRepeat;
+import net.sourceforge.plantuml.activitydiagram3.InstructionSplit;
 import net.sourceforge.plantuml.activitydiagram3.InstructionSwitch;
 import net.sourceforge.plantuml.activitydiagram3.InstructionWhile;
 import net.sourceforge.plantuml.core.Diagram;
@@ -249,6 +250,16 @@ public class DiagramStatsExtractor {
 			for (final InstructionList fork : forks) {
 				countActivityConnections(fork, connections, total);
 			}
+		} else if (instruction instanceof InstructionSplit) {
+			final InstructionSplit splitInst = (InstructionSplit) instruction;
+			final List<InstructionList> splits = splitInst.getSplits();
+			final int splitCount = splits.size();
+			connections.merge("fork_split", splitCount, Integer::sum);
+			connections.merge("fork_join", splitCount, Integer::sum);
+			total[0] += splitCount * 2;
+			for (final InstructionList split : splits) {
+				countActivityConnections(split, connections, total);
+			}
 		} else if (instruction instanceof InstructionSwitch) {
 			final InstructionSwitch switchInst = (InstructionSwitch) instruction;
 			final List<Branch> cases = switchInst.getSwitches();
@@ -306,6 +317,12 @@ public class DiagramStatsExtractor {
 			elements.merge("fork", 1, Integer::sum);
 			for (final InstructionList fork : forkInst.getForks()) {
 				countActivityElements(fork, elements);
+			}
+		} else if (instruction instanceof InstructionSplit) {
+			final InstructionSplit splitInst = (InstructionSplit) instruction;
+			elements.merge("split", 1, Integer::sum);
+			for (final InstructionList split : splitInst.getSplits()) {
+				countActivityElements(split, elements);
 			}
 		} else if (instruction instanceof InstructionSwitch) {
 			final InstructionSwitch switchInst = (InstructionSwitch) instruction;

@@ -59,6 +59,11 @@ import net.sourceforge.plantuml.style.ISkinParam;
 public class InstructionSplit extends AbstractInstruction implements Instruction {
 
 	private final List<InstructionList> splits = new ArrayList<>();
+
+	public List<InstructionList> getSplits() {
+		return splits;
+	}
+
 	private final Instruction parent;
 	private final LinkRendering inlinkRendering;
 	private final Swimlane swimlaneIn;
