@@ -7,7 +7,7 @@ This fork adds minimal modifications to PlantUML (version 1.2025.9) to expose in
 
 ## Changes from Upstream PlantUML
 
-- **10 public getter methods** added to activity diagram instruction classes to expose private fields for tree traversal (44 lines across 9 files)
+- **14 public getter methods** added across activity diagram classes to expose private fields for instruction tree traversal (56 lines across 12 files)
 - **1 new class** added: `net.sourceforge.plantuml.stats.DiagramStatsExtractor` — the extraction tool entry point
 
 ## Prerequisites
@@ -74,11 +74,11 @@ The tool writes one JSON object per diagram to standard output (JSON Lines forma
 
 **Sequence diagrams**: derived from `ParticipantType` enum (e.g., `participant`, `actor`, `database`, `boundary`, `control`).
 
-**Activity diagrams**: derived from instruction node types (e.g., `simple`, `start`, `stop`, `decision`, `loop`, `fork`, `switch`).
+**Activity diagrams**: derived from instruction node types (e.g., `simple`, `start`, `stop`, `decision`, `loop`, `fork`, `split`, `switch`, `group`, `partition`).
 
 ### Connection Type Keys
 
-**Class/component/state/object/usecase/deployment diagrams**: classified by link decoration (e.g., `extends`, `composition`, `aggregation`, `arrow`, `none`).
+**Class/component/state/object/usecase/deployment diagrams**: classified by link decoration (e.g., `extends`, `composition`, `aggregation`, `redefines`, `definedby`, `arrow`, `none`).
 
 **Sequence diagrams**: `message` (between two participants) or `message_exo` (to/from external actor).
 
