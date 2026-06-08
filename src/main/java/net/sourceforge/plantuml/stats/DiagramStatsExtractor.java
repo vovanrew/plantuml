@@ -31,7 +31,9 @@ import net.sourceforge.plantuml.activitydiagram3.InstructionSwitch;
 import net.sourceforge.plantuml.activitydiagram3.InstructionWhile;
 import net.sourceforge.plantuml.core.Diagram;
 import net.sourceforge.plantuml.decoration.LinkDecor;
+import net.sourceforge.plantuml.decoration.LinkType;
 import net.sourceforge.plantuml.error.PSystemError;
+import net.sourceforge.plantuml.klimt.creole.Display;
 import net.sourceforge.plantuml.sequencediagram.Event;
 import net.sourceforge.plantuml.sequencediagram.Message;
 import net.sourceforge.plantuml.sequencediagram.MessageExo;
@@ -94,6 +96,11 @@ public class DiagramStatsExtractor {
 				}
 				blockIndex++;
 			}
+			// A truncated model output (e.g. missing @enduml) parses to zero
+			// blocks; still emit one line so every input file is accounted for.
+			if (blockIndex == 0) {
+				printError(new File(path).getName(), "no_block");
+			}
 		} catch (IOException e) {
 			final String fileId = new File(path).getName();
 			printError(fileId, "io_error:" + e.getMessage());
@@ -138,7 +145,37 @@ public class DiagramStatsExtractor {
 			connections.merge(decorKey, 1, Integer::sum);
 		}
 
-		printJson(id, diagramType, elements, totalConnections, connections, null);
+		// Named graph: leaf entities as nodes (groups are containers, excluded);
+		// links as typed edges with display-name endpoints.
+		final StringBuilder nodes = new StringBuilder("[");
+		boolean firstNode = true;
+		for (final Entity entity : diagram.leafs()) {
+			final LeafType leafType = entity.getLeafType();
+			if (leafType == null)
+				continue;
+			if (firstNode == false)
+				nodes.append(",");
+			nodes.append("{\"name\":").append(jsonString(entityName(entity)))
+				.append(",\"type\":").append(jsonString(leafType.name().toLowerCase())).append("}");
+			firstNode = false;
+		}
+		nodes.append("]");
+
+		final StringBuilder edges = new StringBuilder("[");
+		boolean firstEdge = true;
+		for (final Link link : diagram.getLinks()) {
+			if (firstEdge == false)
+				edges.append(",");
+			edges.append("{\"source\":").append(jsonString(entityName(link.getEntity1())))
+				.append(",\"target\":").append(jsonString(entityName(link.getEntity2())))
+				.append(",\"relation\":").append(jsonString(canonicalRelation(link.getType())))
+				.append(",\"label\":").append(jsonString(flattenDisplay(link.getLabel()))).append("}");
+			firstEdge = false;
+		}
+		edges.append("]");
+
+		printJson(id, diagramType, elements, totalConnections, connections,
+			nodes.toString(), edges.toString(), null);
 	}
 
 	// ---- SequenceDiagram ----
@@ -165,7 +202,51 @@ public class DiagramStatsExtractor {
 			}
 		}
 
-		printJson(id, "sequence", elements, totalConnections, connections, null);
+		// Named graph: participants as nodes; messages as edges (relation
+		// "message"). An exo message has only one real participant: the external
+		// side is emitted as an empty endpoint.
+		final StringBuilder nodes = new StringBuilder("[");
+		boolean firstNode = true;
+		for (final Participant p : diagram.participants()) {
+			if (firstNode == false)
+				nodes.append(",");
+			nodes.append("{\"name\":").append(jsonString(participantName(p)))
+				.append(",\"type\":").append(jsonString(p.getType().name().toLowerCase())).append("}");
+			firstNode = false;
+		}
+		nodes.append("]");
+
+		final StringBuilder edges = new StringBuilder("[");
+		boolean firstEdge = true;
+		for (final Event event : diagram.events()) {
+			String source = null;
+			String target = null;
+			String label = "";
+			if (event instanceof Message) {
+				final Message m = (Message) event;
+				source = participantName(m.getParticipant1());
+				target = participantName(m.getParticipant2());
+				label = flattenDisplay(m.getLabel());
+			} else if (event instanceof MessageExo) {
+				final MessageExo x = (MessageExo) event;
+				source = participantName(x.getParticipant1());
+				target = "";
+				label = flattenDisplay(x.getLabel());
+			} else {
+				continue;
+			}
+			if (firstEdge == false)
+				edges.append(",");
+			edges.append("{\"source\":").append(jsonString(source))
+				.append(",\"target\":").append(jsonString(target))
+				.append(",\"relation\":\"message\"")
+				.append(",\"label\":").append(jsonString(label)).append("}");
+			firstEdge = false;
+		}
+		edges.append("]");
+
+		printJson(id, "sequence", elements, totalConnections, connections,
+			nodes.toString(), edges.toString(), null);
 	}
 
 	// ---- ActivityDiagram3 (beta syntax) ----
@@ -182,7 +263,7 @@ public class DiagramStatsExtractor {
 		// Count instruction types as element info
 		countActivityElements(root, elements);
 
-		printJson(id, "activity", elements, counts[0], connections, null);
+		printJson(id, "activity", elements, counts[0], connections, "[]", "[]", null);
 	}
 
 	private static void countActivityConnections(Instruction instruction, Map<String, Integer> connections, int[] total) {
@@ -340,6 +421,61 @@ public class DiagramStatsExtractor {
 
 	// ---- Helpers ----
 
+	// Flatten a Display (visible label) to a single plain-text string.
+	private static String flattenDisplay(Display display) {
+		if (display == null)
+			return "";
+		final StringBuilder sb = new StringBuilder();
+		for (final CharSequence cs : display.asList()) {
+			if (cs == null)
+				continue;
+			if (sb.length() > 0)
+				sb.append(" ");
+			sb.append(cs.toString());
+		}
+		return sb.toString().trim();
+	}
+
+	// Node identity is the visible display name; fall back to the code/alias.
+	private static String entityName(Entity entity) {
+		if (entity == null)
+			return "";
+		String s = flattenDisplay(entity.getDisplay());
+		if (s.isEmpty())
+			s = entity.getName();
+		return s == null ? "" : s;
+	}
+
+	private static String participantName(Participant p) {
+		if (p == null)
+			return "";
+		String s = flattenDisplay(p.getDisplay(false));
+		if (s.isEmpty())
+			s = p.getCode();
+		return s == null ? "" : s;
+	}
+
+	private static boolean isInheritanceDecor(LinkDecor d) {
+		return d == LinkDecor.EXTENDS || d == LinkDecor.REDEFINES || d == LinkDecor.DEFINEDBY;
+	}
+
+	// Map a PlantUML link to one canonical UML relation category. Realization
+	// (dashed triangle) folds into inheritance; a dashed arrow is a dependency,
+	// any other plain line is an association.
+	private static String canonicalRelation(LinkType type) {
+		final LinkDecor d1 = type.getDecor1();
+		final LinkDecor d2 = type.getDecor2();
+		if (isInheritanceDecor(d1) || isInheritanceDecor(d2))
+			return "inheritance";
+		if (d1 == LinkDecor.COMPOSITION || d2 == LinkDecor.COMPOSITION)
+			return "composition";
+		if (d1 == LinkDecor.AGREGATION || d2 == LinkDecor.AGREGATION)
+			return "aggregation";
+		final String style = type.getStyle().toString();
+		final boolean dashed = style.startsWith("DASHED") || style.startsWith("DOTTED");
+		return dashed ? "dependency" : "association";
+	}
+
 	private static String classifyLinkDecor(LinkDecor decor1, LinkDecor decor2) {
 		// Pick the more meaningful decoration (non-NONE)
 		if (decor1 == LinkDecor.EXTENDS || decor2 == LinkDecor.EXTENDS)
@@ -373,7 +509,8 @@ public class DiagramStatsExtractor {
 	}
 
 	private static void printJson(String id, String diagramType, Map<String, Integer> elements,
-			int totalConnections, Map<String, Integer> connections, String note) {
+			int totalConnections, Map<String, Integer> connections, String nodesJson, String edgesJson,
+			String note) {
 		final StringBuilder sb = new StringBuilder();
 		sb.append("{");
 		sb.append("\"file\":").append(jsonString(id));
@@ -382,6 +519,8 @@ public class DiagramStatsExtractor {
 		sb.append(",\"elements_total\":").append(sumValues(elements));
 		sb.append(",\"connections\":").append(mapToJson(connections));
 		sb.append(",\"connections_total\":").append(totalConnections);
+		sb.append(",\"nodes\":").append(nodesJson);
+		sb.append(",\"edges\":").append(edgesJson);
 		if (note != null)
 			sb.append(",\"note\":").append(jsonString(note));
 		sb.append(",\"error\":null");
@@ -398,6 +537,8 @@ public class DiagramStatsExtractor {
 		sb.append(",\"elements_total\":0");
 		sb.append(",\"connections\":{}");
 		sb.append(",\"connections_total\":0");
+		sb.append(",\"nodes\":[]");
+		sb.append(",\"edges\":[]");
 		sb.append(",\"error\":").append(jsonString(error));
 		sb.append("}");
 		System.out.println(sb.toString());
