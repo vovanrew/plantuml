@@ -37,6 +37,7 @@ import net.sourceforge.plantuml.klimt.creole.Display;
 import net.sourceforge.plantuml.sequencediagram.Event;
 import net.sourceforge.plantuml.sequencediagram.Message;
 import net.sourceforge.plantuml.sequencediagram.MessageExo;
+import net.sourceforge.plantuml.sequencediagram.MessageExoType;
 import net.sourceforge.plantuml.sequencediagram.Participant;
 import net.sourceforge.plantuml.sequencediagram.SequenceDiagram;
 import net.sourceforge.plantuml.skin.UmlDiagramType;
@@ -250,8 +251,19 @@ public class DiagramStatsExtractor {
 				label = flattenDisplay(m.getLabel());
 			} else if (event instanceof MessageExo) {
 				final MessageExo x = (MessageExo) event;
-				source = participantName(x.getParticipant1());
-				target = "";
+				// One endpoint is off the diagram; keep its direction by placing the
+				// empty external endpoint on the correct side. A FROM_* arrow enters
+				// from the border (external is the sender), a TO_* arrow leaves toward
+				// the border (the real participant is the sender).
+				final MessageExoType exoType = x.getType();
+				final String name = participantName(x.getParticipant1());
+				if (exoType == MessageExoType.FROM_LEFT || exoType == MessageExoType.FROM_RIGHT) {
+					source = "";
+					target = name;
+				} else {
+					source = name;
+					target = "";
+				}
 				label = flattenDisplay(x.getLabel());
 			} else {
 				continue;
