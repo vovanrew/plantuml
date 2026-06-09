@@ -159,6 +159,23 @@ public class DiagramStatsExtractor {
 				.append(",\"type\":").append(jsonString(leafType.name().toLowerCase())).append("}");
 			firstNode = false;
 		}
+		// A childless group (empty "{}" box: rectangle/component/database/empty
+		// package) is a single visual element, not a container, so emit it as a
+		// node; a prediction that renders the box as a class then matches it
+		// instead of scoring a false positive. Groups with children stay
+		// containers -- their children are already the nodes.
+		for (final Entity group : diagram.groups()) {
+			final GroupType groupType = group.getGroupType();
+			if (groupType == null || groupType == GroupType.ROOT)
+				continue;
+			if (group.isEmpty() == false)
+				continue;
+			if (firstNode == false)
+				nodes.append(",");
+			nodes.append("{\"name\":").append(jsonString(entityName(group)))
+				.append(",\"type\":").append(jsonString(groupType.name().toLowerCase())).append("}");
+			firstNode = false;
+		}
 		nodes.append("]");
 
 		final StringBuilder edges = new StringBuilder("[");
@@ -166,9 +183,13 @@ public class DiagramStatsExtractor {
 		for (final Link link : diagram.getLinks()) {
 			if (firstEdge == false)
 				edges.append(",");
-			edges.append("{\"source\":").append(jsonString(entityName(link.getEntity1())))
-				.append(",\"target\":").append(jsonString(entityName(link.getEntity2())))
-				.append(",\"relation\":").append(jsonString(canonicalRelation(link.getType())))
+			final String relation = canonicalRelation(link.getType());
+			final boolean swap = swapEndpoints(relation, link.getType());
+			final Entity src = swap ? link.getEntity2() : link.getEntity1();
+			final Entity tgt = swap ? link.getEntity1() : link.getEntity2();
+			edges.append("{\"source\":").append(jsonString(entityName(src)))
+				.append(",\"target\":").append(jsonString(entityName(tgt)))
+				.append(",\"relation\":").append(jsonString(relation))
 				.append(",\"label\":").append(jsonString(flattenDisplay(link.getLabel()))).append("}");
 			firstEdge = false;
 		}
@@ -457,6 +478,39 @@ public class DiagramStatsExtractor {
 
 	private static boolean isInheritanceDecor(LinkDecor d) {
 		return d == LinkDecor.EXTENDS || d == LinkDecor.REDEFINES || d == LinkDecor.DEFINEDBY;
+	}
+
+	private static boolean isDiamondDecor(LinkDecor d) {
+		return d == LinkDecor.COMPOSITION || d == LinkDecor.AGREGATION;
+	}
+
+	private static boolean isArrowHeadDecor(LinkDecor d) {
+		return d == LinkDecor.ARROW || d == LinkDecor.ARROW_TRIANGLE;
+	}
+
+	// Canonical edge orientation derived from the link decoration, not from source
+	// token order, so two snippets that render the same relationship (e.g. A *-- B
+	// and B --* A) emit the same edge. The decorated end identifies the
+	// parent/whole/head; the rules follow evaluation-framework.md 2.2/4:
+	// inheritance child->parent, composition/aggregation whole->part, dependency
+	// tail->head. PlantUML reports getDecor1()/getDecor2() crossed relative to
+	// getEntity1()/getEntity2(), so decor2 is the decoration adjacent to entity1.
+	// Association and message carry no decoration-derived orientation and keep
+	// entity order.
+	private static boolean swapEndpoints(String relation, LinkType type) {
+		final LinkDecor d1 = type.getDecor1();
+		final LinkDecor d2 = type.getDecor2();
+		switch (relation) {
+			case "inheritance":  // parent carries the triangle; source = child (other end)
+				return isInheritanceDecor(d2) && isInheritanceDecor(d1) == false;
+			case "composition":
+			case "aggregation":  // whole carries the diamond; source = whole
+				return isDiamondDecor(d1) && isDiamondDecor(d2) == false;
+			case "dependency":   // head carries the arrow; source = tail (other end)
+				return isArrowHeadDecor(d2) && isArrowHeadDecor(d1) == false;
+			default:
+				return false;
+		}
 	}
 
 	// Map a PlantUML link to one canonical UML relation category. Realization
