@@ -70,6 +70,12 @@ public class CreoleHorizontalLine extends AbstractAtom implements Atom {
 		this.skinParam = skinParam;
 	}
 
+	// Source of the title drawn inside the rule (`==Title==`), empty for a plain
+	// rule. Read by DiagramStatsExtractor so a titled rule keeps its drawn text.
+	public String getTitleLine() {
+		return line;
+	}
+
 	private UHorizontalLine getHorizontalLine() {
 		if (line.length() == 0)
 			return UHorizontalLine.infinite(defaultThickness, 0, 0, style);

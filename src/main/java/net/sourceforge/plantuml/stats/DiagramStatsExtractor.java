@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -33,7 +34,17 @@ import net.sourceforge.plantuml.core.Diagram;
 import net.sourceforge.plantuml.decoration.LinkDecor;
 import net.sourceforge.plantuml.decoration.LinkType;
 import net.sourceforge.plantuml.error.PSystemError;
+import net.sourceforge.plantuml.klimt.creole.CreoleHorizontalLine;
+import net.sourceforge.plantuml.klimt.creole.CreoleMode;
 import net.sourceforge.plantuml.klimt.creole.Display;
+import net.sourceforge.plantuml.klimt.creole.Sheet;
+import net.sourceforge.plantuml.klimt.creole.Stripe;
+import net.sourceforge.plantuml.klimt.creole.atom.Atom;
+import net.sourceforge.plantuml.klimt.creole.legacy.AtomText;
+import net.sourceforge.plantuml.klimt.creole.legacy.CreoleParser;
+import net.sourceforge.plantuml.klimt.font.FontConfiguration;
+import net.sourceforge.plantuml.klimt.font.UFont;
+import net.sourceforge.plantuml.klimt.geom.HorizontalAlignment;
 import net.sourceforge.plantuml.sequencediagram.Event;
 import net.sourceforge.plantuml.sequencediagram.Message;
 import net.sourceforge.plantuml.sequencediagram.MessageExo;
@@ -41,13 +52,55 @@ import net.sourceforge.plantuml.sequencediagram.MessageExoType;
 import net.sourceforge.plantuml.sequencediagram.Participant;
 import net.sourceforge.plantuml.sequencediagram.SequenceDiagram;
 import net.sourceforge.plantuml.skin.UmlDiagramType;
+import net.sourceforge.plantuml.style.ISkinParam;
+import net.sourceforge.plantuml.style.SName;
+import net.sourceforge.plantuml.style.StyleSignatureBasic;
 
 public class DiagramStatsExtractor {
 
-	public static void main(String[] args) {
+	// How a node name is read from its label. "drawn" is the default: the text
+	// PlantUML draws, largest-font-size line(s) only. "markup" keeps every drawn
+	// line. "raw" joins the label lines as typed.
+	private static final String NAMES_RAW = "raw";
+	private static final String NAMES_MARKUP = "markup";
+	private static final String NAMES_DRAWN = "drawn";
+	private static String namesMode = NAMES_DRAWN;
+
+	// Emit, per association edge, which end carries an arrowhead.
+	private static boolean emitArrowheads = true;
+
+	// Diagnostic override of the font size that unsized label text starts from;
+	// -1 takes it from the diagram's own style.
+	private static int forcedNameFontSize = -1;
+
+	public static void main(String[] argv) {
+		// Labels are parsed, never drawn: no display or font subsystem is needed.
+		if (System.getProperty("java.awt.headless") == null)
+			System.setProperty("java.awt.headless", "true");
+
+		final List<String> rest = new ArrayList<>();
+		for (final String a : argv) {
+			if (a.startsWith("--names=")) {
+				namesMode = a.substring("--names=".length());
+				if (namesMode.equals(NAMES_RAW) == false && namesMode.equals(NAMES_MARKUP) == false
+						&& namesMode.equals(NAMES_DRAWN) == false) {
+					System.err.println("Unknown --names value: " + namesMode);
+					System.exit(1);
+				}
+			} else if (a.equals("--no-arrowheads")) {
+				emitArrowheads = false;
+			} else if (a.startsWith("--name-font-size=")) {
+				forcedNameFontSize = Integer.parseInt(a.substring("--name-font-size=".length()));
+			} else {
+				rest.add(a);
+			}
+		}
+		final String[] args = rest.toArray(new String[0]);
+
 		if (args.length < 1) {
-			System.err.println("Usage: DiagramStatsExtractor <file.puml> [file2.puml ...]");
-			System.err.println("       DiagramStatsExtractor --dir <directory>");
+			System.err.println("Usage: DiagramStatsExtractor [options] <file.puml> [file2.puml ...]");
+			System.err.println("       DiagramStatsExtractor [options] --dir <directory>");
+			System.err.println("Options: --names=drawn|markup|raw  --no-arrowheads  --name-font-size=<n>");
 			System.exit(1);
 		}
 
@@ -156,7 +209,7 @@ public class DiagramStatsExtractor {
 				continue;
 			if (firstNode == false)
 				nodes.append(",");
-			nodes.append("{\"name\":").append(jsonString(entityName(entity)))
+			nodes.append("{\"name\":").append(jsonString(entityName(diagram, entity)))
 				.append(",\"type\":").append(jsonString(leafType.name().toLowerCase())).append("}");
 			firstNode = false;
 		}
@@ -173,7 +226,7 @@ public class DiagramStatsExtractor {
 				continue;
 			if (firstNode == false)
 				nodes.append(",");
-			nodes.append("{\"name\":").append(jsonString(entityName(group)))
+			nodes.append("{\"name\":").append(jsonString(entityName(diagram, group)))
 				.append(",\"type\":").append(jsonString(groupType.name().toLowerCase())).append("}");
 			firstNode = false;
 		}
@@ -188,10 +241,13 @@ public class DiagramStatsExtractor {
 			final boolean swap = swapEndpoints(relation, link.getType());
 			final Entity src = swap ? link.getEntity2() : link.getEntity1();
 			final Entity tgt = swap ? link.getEntity1() : link.getEntity2();
-			edges.append("{\"source\":").append(jsonString(entityName(src)))
-				.append(",\"target\":").append(jsonString(entityName(tgt)))
+			edges.append("{\"source\":").append(jsonString(entityName(diagram, src)))
+				.append(",\"target\":").append(jsonString(entityName(diagram, tgt)))
 				.append(",\"relation\":").append(jsonString(relation))
-				.append(",\"label\":").append(jsonString(flattenDisplay(link.getLabel()))).append("}");
+				.append(",\"label\":").append(jsonString(flattenDisplay(link.getLabel())));
+			if (emitArrowheads && relation.equals("association"))
+				edges.append(",\"arrowhead\":").append(jsonString(arrowheadEnd(link.getType())));
+			edges.append("}");
 			firstEdge = false;
 		}
 		edges.append("]");
@@ -232,7 +288,7 @@ public class DiagramStatsExtractor {
 		for (final Participant p : diagram.participants()) {
 			if (firstNode == false)
 				nodes.append(",");
-			nodes.append("{\"name\":").append(jsonString(participantName(p)))
+			nodes.append("{\"name\":").append(jsonString(participantName(diagram, p)))
 				.append(",\"type\":").append(jsonString(p.getType().name().toLowerCase())).append("}");
 			firstNode = false;
 		}
@@ -246,8 +302,8 @@ public class DiagramStatsExtractor {
 			String label = "";
 			if (event instanceof Message) {
 				final Message m = (Message) event;
-				source = participantName(m.getParticipant1());
-				target = participantName(m.getParticipant2());
+				source = participantName(diagram, m.getParticipant1());
+				target = participantName(diagram, m.getParticipant2());
 				label = flattenDisplay(m.getLabel());
 			} else if (event instanceof MessageExo) {
 				final MessageExo x = (MessageExo) event;
@@ -256,7 +312,7 @@ public class DiagramStatsExtractor {
 				// from the border (external is the sender), a TO_* arrow leaves toward
 				// the border (the real participant is the sender).
 				final MessageExoType exoType = x.getType();
-				final String name = participantName(x.getParticipant1());
+				final String name = participantName(diagram, x.getParticipant1());
 				if (exoType == MessageExoType.FROM_LEFT || exoType == MessageExoType.FROM_RIGHT) {
 					source = "";
 					target = name;
@@ -454,7 +510,8 @@ public class DiagramStatsExtractor {
 
 	// ---- Helpers ----
 
-	// Flatten a Display (visible label) to a single plain-text string.
+	// Flatten a Display to a single string by joining its lines as typed. Used
+	// for edge labels (not part of any match key) and for names under --names=raw.
 	private static String flattenDisplay(Display display) {
 		if (display == null)
 			return "";
@@ -469,20 +526,99 @@ public class DiagramStatsExtractor {
 		return sb.toString().trim();
 	}
 
+	// Name as PlantUML draws it. The label goes through PlantUML's own markup
+	// parser under the diagram's own skin; a line's text is the concatenation of
+	// its text atoms, so formatting markup, icons, sprites and the letter of a
+	// stereotype spot are not part of it, while a stereotype label and unknown
+	// single-angle text (generics) are. When the lines of a label differ in font
+	// size, only the line(s) at the largest size are the name (a name above a
+	// smaller package line). `font` is the font unsized text starts from.
+	private static String drawnName(Display display, UFont font, ISkinParam skinParam) {
+		if (Display.isNull(display))
+			return "";
+		if (forcedNameFontSize > 0)
+			font = font.withSize(forcedNameFontSize);
+		final FontConfiguration fc = FontConfiguration.blackBlueTrue(font);
+		final CreoleParser parser = new CreoleParser(fc, HorizontalAlignment.LEFT, skinParam, CreoleMode.FULL, fc);
+		final List<String> texts = new ArrayList<>();
+		final List<Integer> sizes = new ArrayList<>();
+		collectDrawnLines(parser, skinParam, display, texts, sizes);
+
+		int largest = 0;
+		for (final int size : sizes)
+			largest = Math.max(largest, size);
+		final StringBuilder sb = new StringBuilder();
+		for (int i = 0; i < texts.size(); i++) {
+			if (namesMode.equals(NAMES_DRAWN) && sizes.get(i) != largest)
+				continue;
+			if (sb.length() > 0)
+				sb.append(" ");
+			sb.append(texts.get(i));
+		}
+		return sb.toString().trim();
+	}
+
+	// One entry per drawn line that carries text: the text and the largest font
+	// size among its text atoms. The title of a rule (`==Title==`) is drawn
+	// inside the rule and counts as a line.
+	private static void collectDrawnLines(CreoleParser parser, ISkinParam skinParam, Display display,
+			List<String> texts, List<Integer> sizes) {
+		final Sheet sheet = parser.createSheet(display);
+		for (final Stripe stripe : sheet) {
+			final StringBuilder text = new StringBuilder();
+			int size = 0;
+			for (final Atom atom : stripe.getAtoms()) {
+				if (atom instanceof AtomText) {
+					final AtomText atomText = (AtomText) atom;
+					text.append(atomText.getText());
+					size = Math.max(size, atomText.getFontConfiguration().getFont().getSize());
+				} else if (atom instanceof CreoleHorizontalLine) {
+					final String title = ((CreoleHorizontalLine) atom).getTitleLine();
+					if (title.length() > 0)
+						collectDrawnLines(parser, skinParam, Display.getWithNewlines(skinParam.getPragma(), title),
+								texts, sizes);
+				}
+			}
+			if (text.toString().trim().isEmpty() == false) {
+				texts.add(text.toString());
+				sizes.add(size);
+			}
+		}
+	}
+
+	// The font PlantUML starts an element's label from, resolved from the
+	// diagram's own style (skin defaults plus any skinparam/style in the source).
+	private static UFont nameFont(CucaDiagram diagram, Entity entity) {
+		final SName diagramName = diagram.getUmlDiagramType().getStyleName();
+		final LeafType leafType = entity.getLeafType();
+		final StyleSignatureBasic signature;
+		if (leafType == LeafType.NOTE || leafType == LeafType.TIPS)
+			signature = StyleSignatureBasic.of(SName.root, SName.element, diagramName, SName.note);
+		else if (leafType != null && diagram.getUmlDiagramType() == UmlDiagramType.CLASS)
+			signature = StyleSignatureBasic.of(SName.root, SName.element, SName.classDiagram, SName.class_,
+					SName.header);
+		else
+			signature = StyleSignatureBasic.of(SName.root, SName.element, diagramName);
+		return signature.withTOBECHANGED(entity.getStereotype()).with(entity.getStereostyles())
+				.getMergedStyle(diagram.getSkinParam().getCurrentStyleBuilder()).getUFont();
+	}
+
 	// Node identity is the visible display name; fall back to the code/alias.
-	private static String entityName(Entity entity) {
+	private static String entityName(CucaDiagram diagram, Entity entity) {
 		if (entity == null)
 			return "";
-		String s = flattenDisplay(entity.getDisplay());
+		String s = namesMode.equals(NAMES_RAW) ? flattenDisplay(entity.getDisplay())
+				: drawnName(entity.getDisplay(), nameFont(diagram, entity), diagram.getSkinParam());
 		if (s.isEmpty())
 			s = entity.getName();
 		return s == null ? "" : s;
 	}
 
-	private static String participantName(Participant p) {
+	private static String participantName(SequenceDiagram diagram, Participant p) {
 		if (p == null)
 			return "";
-		String s = flattenDisplay(p.getDisplay(false));
+		String s = namesMode.equals(NAMES_RAW) ? flattenDisplay(p.getDisplay(false))
+				: drawnName(p.getDisplay(false), p.getUsedStyles()[0].getUFont(), diagram.getSkinParam());
 		if (s.isEmpty())
 			s = p.getCode();
 		return s == null ? "" : s;
@@ -498,6 +634,22 @@ public class DiagramStatsExtractor {
 
 	private static boolean isArrowHeadDecor(LinkDecor d) {
 		return d == LinkDecor.ARROW || d == LinkDecor.ARROW_TRIANGLE;
+	}
+
+	// Which end of an association carries an arrowhead, relative to the emitted
+	// source/target (an association keeps entity order, see swapEndpoints):
+	// "none", "source", "target" or "both". getDecor2() is the decoration adjacent
+	// to entity1, getDecor1() the one adjacent to entity2.
+	private static String arrowheadEnd(LinkType type) {
+		final boolean atSource = isArrowHeadDecor(type.getDecor2());
+		final boolean atTarget = isArrowHeadDecor(type.getDecor1());
+		if (atSource && atTarget)
+			return "both";
+		if (atTarget)
+			return "target";
+		if (atSource)
+			return "source";
+		return "none";
 	}
 
 	// Canonical edge orientation derived from the link decoration, not from source
