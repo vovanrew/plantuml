@@ -7,13 +7,17 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 import net.atmp.CucaDiagram;
 import net.sourceforge.plantuml.BlockUml;
+import net.sourceforge.plantuml.EmbeddedDiagram;
 import net.sourceforge.plantuml.SourceStringReader;
+import net.sourceforge.plantuml.StringUtils;
 import net.sourceforge.plantuml.abel.Entity;
 import net.sourceforge.plantuml.abel.GroupType;
 import net.sourceforge.plantuml.abel.LeafType;
@@ -31,6 +35,7 @@ import net.sourceforge.plantuml.activitydiagram3.InstructionSplit;
 import net.sourceforge.plantuml.activitydiagram3.InstructionSwitch;
 import net.sourceforge.plantuml.activitydiagram3.InstructionWhile;
 import net.sourceforge.plantuml.core.Diagram;
+import net.sourceforge.plantuml.cucadiagram.BodyEnhancedAbstract;
 import net.sourceforge.plantuml.decoration.LinkDecor;
 import net.sourceforge.plantuml.decoration.LinkType;
 import net.sourceforge.plantuml.error.PSystemError;
@@ -526,23 +531,55 @@ public class DiagramStatsExtractor {
 		return sb.toString().trim();
 	}
 
+	// How PlantUML draws the label of an element, which decides how its name is
+	// read. PLAIN: the whole label through the markup parser with every markup
+	// on (participants, objects, packages). CLASS_HEADER: the header of a
+	// class-like element is drawn without `__underline__` and without list items
+	// (EntityImageClassHeader, CreoleMode.FULL_BUT_UNDERSCORE). BODY: the label
+	// of a note, a use case or a rectangle-like element is drawn by the body
+	// builder (BodyEnhanced2), which first cuts it at separator lines.
+	private static final int LABEL_PLAIN = 0;
+	private static final int LABEL_CLASS_HEADER = 1;
+	private static final int LABEL_BODY = 2;
+
+	private static int labelPath(Entity entity) {
+		final LeafType leafType = entity.getLeafType();
+		if (leafType == null) // a childless group: drawn like a rectangle when it has a symbol
+			return entity.getUSymbol() == null ? LABEL_PLAIN : LABEL_BODY;
+		if (leafType.isLikeClass())
+			return LABEL_CLASS_HEADER;
+		if (leafType == LeafType.NOTE || leafType == LeafType.TIPS || leafType == LeafType.DESCRIPTION
+				|| leafType == LeafType.USECASE || leafType == LeafType.USECASE_BUSINESS
+				|| leafType == LeafType.CIRCLE)
+			return LABEL_BODY;
+		return LABEL_PLAIN;
+	}
+
 	// Name as PlantUML draws it. The label goes through PlantUML's own markup
-	// parser under the diagram's own skin; a line's text is the concatenation of
-	// its text atoms, so formatting markup, icons, sprites and the letter of a
-	// stereotype spot are not part of it, while a stereotype label and unknown
-	// single-angle text (generics) are. When the lines of a label differ in font
-	// size, only the line(s) at the largest size are the name (a name above a
-	// smaller package line). `font` is the font unsized text starts from.
-	private static String drawnName(Display display, UFont font, ISkinParam skinParam) {
+	// parser under the diagram's own skin, on the path PlantUML draws that kind
+	// of element with; a line's text is the concatenation of its text atoms, so
+	// formatting markup, icons, sprites and the letter of a stereotype spot are
+	// not part of it, while a stereotype label and unknown single-angle text
+	// (generics) are. When the lines of a label differ in font size, only the
+	// line(s) at the largest size are the name (a name above a smaller package
+	// line). `font` is the font unsized text starts from.
+	private static String drawnName(Display display, UFont font, ISkinParam skinParam, int labelPath) {
 		if (Display.isNull(display))
 			return "";
 		if (forcedNameFontSize > 0)
 			font = font.withSize(forcedNameFontSize);
 		final FontConfiguration fc = FontConfiguration.blackBlueTrue(font);
-		final CreoleParser parser = new CreoleParser(fc, HorizontalAlignment.LEFT, skinParam, CreoleMode.FULL, fc);
+		// The title of a rule is drawn with every markup on, whatever the element.
+		final CreoleParser full = new CreoleParser(fc, HorizontalAlignment.LEFT, skinParam, CreoleMode.FULL, fc);
+		final CreoleParser parser = labelPath == LABEL_CLASS_HEADER
+				? new CreoleParser(fc, HorizontalAlignment.LEFT, skinParam, CreoleMode.FULL_BUT_UNDERSCORE, fc)
+				: full;
 		final List<String> texts = new ArrayList<>();
 		final List<Integer> sizes = new ArrayList<>();
-		collectDrawnLines(parser, skinParam, display, texts, sizes);
+		if (labelPath == LABEL_BODY)
+			collectBodyLines(full, skinParam, display, texts, sizes);
+		else
+			collectDrawnLines(parser, full, skinParam, display, texts, sizes);
 
 		int largest = 0;
 		for (final int size : sizes)
@@ -558,11 +595,57 @@ public class DiagramStatsExtractor {
 		return sb.toString().trim();
 	}
 
+	// A separator title that holds nothing but separator characters is part of
+	// the drawn rule, not text.
+	private static final Pattern SEPARATOR_CHARACTERS_ONLY = Pattern.compile("[-=._\\s]*");
+
+	// The body builder's reading of a label (BodyEnhanced2.getArea): a separator
+	// line (`--`, `==`, `..`, `__`, alone or around a title) is a drawn rule that
+	// cuts the label into blocks, and each block goes through the markup parser
+	// on its own. An embedded diagram is kept whole inside its block.
+	private static void collectBodyLines(CreoleParser parser, ISkinParam skinParam, Display display,
+			List<String> texts, List<Integer> sizes) {
+		Display block = Display.empty();
+		final Iterator<CharSequence> it = display.iterator();
+		while (it.hasNext()) {
+			final CharSequence s = it.next();
+			if (s == null)
+				continue;
+			if (EmbeddedDiagram.getEmbeddedType(StringUtils.trinNoTrace(s)) != null) {
+				block = block.add(s);
+				int nested = 1;
+				while (nested > 0 && it.hasNext()) {
+					final CharSequence inner = it.next();
+					if (inner == null)
+						continue;
+					block = block.add(inner);
+					if (EmbeddedDiagram.getEmbeddedType(StringUtils.trinNoTrace(inner)) != null)
+						nested++;
+					else if (StringUtils.trinNoTrace(inner).equals(EmbeddedDiagram.EMBEDDED_END))
+						nested--;
+				}
+			} else if (BodyEnhancedAbstract.isBlockSeparator(s)) {
+				collectDrawnLines(parser, parser, skinParam, block, texts, sizes);
+				block = Display.empty();
+				final String line = s.toString();
+				if (line.length() > 4) {
+					final String title = StringUtils.trin(line.substring(2, line.length() - 2));
+					if (SEPARATOR_CHARACTERS_ONLY.matcher(title).matches() == false)
+						collectDrawnLines(parser, parser, skinParam,
+								Display.getWithNewlines(skinParam.getPragma(), title), texts, sizes);
+				}
+			} else {
+				block = block.add(s);
+			}
+		}
+		collectDrawnLines(parser, parser, skinParam, block, texts, sizes);
+	}
+
 	// One entry per drawn line that carries text: the text and the largest font
 	// size among its text atoms. The title of a rule (`==Title==`) is drawn
-	// inside the rule and counts as a line.
-	private static void collectDrawnLines(CreoleParser parser, ISkinParam skinParam, Display display,
-			List<String> texts, List<Integer> sizes) {
+	// inside the rule and counts as a line; `titleParser` reads it.
+	private static void collectDrawnLines(CreoleParser parser, CreoleParser titleParser, ISkinParam skinParam,
+			Display display, List<String> texts, List<Integer> sizes) {
 		final Sheet sheet = parser.createSheet(display);
 		for (final Stripe stripe : sheet) {
 			final StringBuilder text = new StringBuilder();
@@ -575,8 +658,8 @@ public class DiagramStatsExtractor {
 				} else if (atom instanceof CreoleHorizontalLine) {
 					final String title = ((CreoleHorizontalLine) atom).getTitleLine();
 					if (title.length() > 0)
-						collectDrawnLines(parser, skinParam, Display.getWithNewlines(skinParam.getPragma(), title),
-								texts, sizes);
+						collectDrawnLines(titleParser, titleParser, skinParam,
+								Display.getWithNewlines(skinParam.getPragma(), title), texts, sizes);
 				}
 			}
 			if (text.toString().trim().isEmpty() == false) {
@@ -608,7 +691,8 @@ public class DiagramStatsExtractor {
 		if (entity == null)
 			return "";
 		String s = namesMode.equals(NAMES_RAW) ? flattenDisplay(entity.getDisplay())
-				: drawnName(entity.getDisplay(), nameFont(diagram, entity), diagram.getSkinParam());
+				: drawnName(entity.getDisplay(), nameFont(diagram, entity), diagram.getSkinParam(),
+						labelPath(entity));
 		if (s.isEmpty())
 			s = entity.getName();
 		return s == null ? "" : s;
@@ -618,7 +702,8 @@ public class DiagramStatsExtractor {
 		if (p == null)
 			return "";
 		String s = namesMode.equals(NAMES_RAW) ? flattenDisplay(p.getDisplay(false))
-				: drawnName(p.getDisplay(false), p.getUsedStyles()[0].getUFont(), diagram.getSkinParam());
+				: drawnName(p.getDisplay(false), p.getUsedStyles()[0].getUFont(), diagram.getSkinParam(),
+						LABEL_PLAIN);
 		if (s.isEmpty())
 			s = p.getCode();
 		return s == null ? "" : s;
