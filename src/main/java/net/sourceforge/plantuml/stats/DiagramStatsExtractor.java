@@ -50,6 +50,7 @@ import net.sourceforge.plantuml.klimt.creole.legacy.CreoleParser;
 import net.sourceforge.plantuml.klimt.font.FontConfiguration;
 import net.sourceforge.plantuml.klimt.font.UFont;
 import net.sourceforge.plantuml.klimt.geom.HorizontalAlignment;
+import net.sourceforge.plantuml.sequencediagram.AbstractMessage;
 import net.sourceforge.plantuml.sequencediagram.Event;
 import net.sourceforge.plantuml.sequencediagram.Message;
 import net.sourceforge.plantuml.sequencediagram.MessageExo;
@@ -74,6 +75,10 @@ public class DiagramStatsExtractor {
 	// Emit, per association edge, which end carries an arrowhead.
 	private static boolean emitArrowheads = true;
 
+	// Emit every link and every message as an edge, whether PlantUML draws it
+	// or not. Off by default: an edge is a link or a message PlantUML draws.
+	private static boolean emitUndrawnEdges = false;
+
 	// Diagnostic override of the font size that unsized label text starts from;
 	// -1 takes it from the diagram's own style.
 	private static int forcedNameFontSize = -1;
@@ -94,6 +99,8 @@ public class DiagramStatsExtractor {
 				}
 			} else if (a.equals("--no-arrowheads")) {
 				emitArrowheads = false;
+			} else if (a.equals("--undrawn-edges")) {
+				emitUndrawnEdges = true;
 			} else if (a.startsWith("--name-font-size=")) {
 				forcedNameFontSize = Integer.parseInt(a.substring("--name-font-size=".length()));
 			} else {
@@ -105,7 +112,7 @@ public class DiagramStatsExtractor {
 		if (args.length < 1) {
 			System.err.println("Usage: DiagramStatsExtractor [options] <file.puml> [file2.puml ...]");
 			System.err.println("       DiagramStatsExtractor [options] --dir <directory>");
-			System.err.println("Options: --names=drawn|markup|raw  --no-arrowheads  --name-font-size=<n>");
+			System.err.println("Options: --names=drawn|markup|raw  --no-arrowheads  --undrawn-edges  --name-font-size=<n>");
 			System.exit(1);
 		}
 
@@ -194,9 +201,11 @@ public class DiagramStatsExtractor {
 			elements.merge(key, 1, Integer::sum);
 		}
 
-		// Count links by decoration type
+		// Count links by decoration type: the links that are edges below
 		int totalConnections = 0;
 		for (final Link link : diagram.getLinks()) {
+			if (isEdge(link) == false)
+				continue;
 			totalConnections++;
 			final LinkDecor decor1 = link.getType().getDecor1();
 			final LinkDecor decor2 = link.getType().getDecor2();
@@ -205,7 +214,7 @@ public class DiagramStatsExtractor {
 		}
 
 		// Named graph: leaf entities as nodes (groups are containers, excluded);
-		// links as typed edges with display-name endpoints.
+		// the links PlantUML draws as typed edges with display-name endpoints.
 		final StringBuilder nodes = new StringBuilder("[");
 		boolean firstNode = true;
 		for (final Entity entity : diagram.leafs()) {
@@ -240,6 +249,8 @@ public class DiagramStatsExtractor {
 		final StringBuilder edges = new StringBuilder("[");
 		boolean firstEdge = true;
 		for (final Link link : diagram.getLinks()) {
+			if (isEdge(link) == false)
+				continue;
 			if (firstEdge == false)
 				edges.append(",");
 			final String relation = canonicalRelation(link.getType());
@@ -273,9 +284,11 @@ public class DiagramStatsExtractor {
 			elements.merge(key, 1, Integer::sum);
 		}
 
-		// Count messages
+		// Count messages: the messages that are edges below
 		int totalConnections = 0;
 		for (final Event event : diagram.events()) {
+			if (isHiddenMessage(event))
+				continue;
 			if (event instanceof Message) {
 				totalConnections++;
 				connections.merge("message", 1, Integer::sum);
@@ -285,9 +298,9 @@ public class DiagramStatsExtractor {
 			}
 		}
 
-		// Named graph: participants as nodes; messages as edges (relation
-		// "message"). An exo message has only one real participant: the external
-		// side is emitted as an empty endpoint.
+		// Named graph: participants as nodes; the messages PlantUML draws as edges
+		// (relation "message"). An exo message has only one real participant: the
+		// external side is emitted as an empty endpoint.
 		final StringBuilder nodes = new StringBuilder("[");
 		boolean firstNode = true;
 		for (final Participant p : diagram.participants()) {
@@ -302,6 +315,8 @@ public class DiagramStatsExtractor {
 		final StringBuilder edges = new StringBuilder("[");
 		boolean firstEdge = true;
 		for (final Event event : diagram.events()) {
+			if (isHiddenMessage(event))
+				continue;
 			String source = null;
 			String target = null;
 			String label = "";
@@ -514,6 +529,28 @@ public class DiagramStatsExtractor {
 	}
 
 	// ---- Helpers ----
+
+	// A link is an edge when PlantUML draws it. PlantUML marks as not drawn
+	// (Link.isInvis(), Link.isHidden(), Link.isRemoved()) the links it adds
+	// itself to lay out unconnected elements, a link the source writes as
+	// [hidden] and a link to an element the source hides or removes. The link of
+	// a tip (a note on a class member) to its owner carries the same mark, but
+	// the image shows the note's pointer to the member in its place, so it stays
+	// an edge.
+	private static boolean isEdge(Link link) {
+		if (emitUndrawnEdges)
+			return true;
+		if (link.getEntity1().getLeafType() == LeafType.TIPS || link.getEntity2().getLeafType() == LeafType.TIPS)
+			return true;
+		return link.isInvis() == false && link.isHidden() == false && link.isRemoved() == false;
+	}
+
+	// A message the source writes as [hidden] takes its place in the sequence
+	// but is not drawn, so it is not an edge.
+	private static boolean isHiddenMessage(Event event) {
+		return emitUndrawnEdges == false && event instanceof AbstractMessage
+				&& ((AbstractMessage) event).getArrowConfiguration().isHidden();
+	}
 
 	// Flatten a Display to a single string by joining its lines as typed. Used
 	// for edge labels (not part of any match key) and for names under --names=raw.
